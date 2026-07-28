@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      MAX_UPLOAD_MB: 5
+    restart: unless-stopped
