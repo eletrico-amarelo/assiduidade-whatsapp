@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseWhatsAppExport } from '../parser/whatsapp.js';
-import { resolveCompleteMonths } from './imports.js';
+import { monthlyFilename, resolveCompleteMonths } from './imports.js';
+
+test('formats the month with two digits in monthly filenames', () => {
+  assert.equal(monthlyFilename(5, 2024), 'assiduidade_05_2024.txt');
+  assert.equal(monthlyFilename(12, 2024), 'assiduidade_12_2024.txt');
+});
 
 test('exports only months completely enclosed by the conversation interval', () => {
   const messages = parseWhatsAppExport([

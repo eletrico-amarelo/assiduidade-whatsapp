@@ -13,6 +13,7 @@ const exportsDirectory = path.join(dataDirectory, 'exports');
 interface ImportMetadata {
   filename: string;
   editedFilename?: string;
+  editedInExports?: boolean;
 }
 
 export async function archiveImport(filename: string, content: string) {
@@ -60,7 +61,7 @@ export async function createMonthlyExports(importId: string) {
 }
 
 export function getMonthlyExportPath(filename: string) {
-  if (!/^assiduidade_(?:[1-9]|1[0-2])_\d{4}\.txt$/.test(filename)) {
+  if (!/^assiduidade_(?:0[1-9]|1[0-2])_\d{4}\.txt$/.test(filename)) {
     throw new Error('Nome de exportação inválido.');
   }
   return path.join(exportsDirectory, filename);
@@ -82,8 +83,20 @@ export async function editImport(
     .join('\n');
 
   const editedFilename = withEditedSuffix(metadata.filename);
-  await writeFile(path.join(importDirectory(importId), editedFilename), `${editedContent}\n`, 'utf8');
-  await writeMetadata(importId, { ...metadata, editedFilename });
+  const isMonthlyFile = isMonthlyFilename(metadata.filename);
+  const editedDirectory = isMonthlyFile ? exportsDirectory : importDirectory(importId);
+
+  if (isMonthlyFile) {
+    await mkdir(exportsDirectory, { recursive: true });
+    const originalExportPath = path.join(exportsDirectory, metadata.filename);
+    if (!await fileExists(originalExportPath)) {
+      const originalContent = await readFile(path.join(importDirectory(importId), metadata.filename), 'utf8');
+      await writeFile(originalExportPath, originalContent, { encoding: 'utf8', flag: 'wx' });
+    }
+  }
+
+  await writeFile(path.join(editedDirectory, editedFilename), `${editedContent}\n`, 'utf8');
+  await writeMetadata(importId, { ...metadata, editedFilename, editedInExports: isMonthlyFile });
   return { content: editedContent, filename: editedFilename };
 }
 
@@ -119,7 +132,10 @@ async function readActiveImport(importId: string) {
     await readFile(path.join(importDirectory(importId), 'metadata.json'), 'utf8'),
   ) as ImportMetadata;
   const activeFilename = metadata.editedFilename ?? metadata.filename;
-  const content = await readFile(path.join(importDirectory(importId), activeFilename), 'utf8');
+  const activeDirectory = metadata.editedFilename && metadata.editedInExports
+    ? exportsDirectory
+    : importDirectory(importId);
+  const content = await readFile(path.join(activeDirectory, activeFilename), 'utf8');
   return { content, metadata };
 }
 
@@ -155,8 +171,12 @@ function withEditedSuffix(filename: string) {
   return filename.replace(/(?:_editado)?\.txt$/i, '_editado.txt');
 }
 
-function monthlyFilename(month: number, year: number) {
-  return `assiduidade_${month}_${year}.txt`;
+function isMonthlyFilename(filename: string) {
+  return /^assiduidade_(?:0[1-9]|1[0-2])_\d{4}\.txt$/i.test(filename);
+}
+
+export function monthlyFilename(month: number, year: number) {
+  return `assiduidade_${String(month).padStart(2, '0')}_${year}.txt`;
 }
 
 async function fileExists(filename: string) {

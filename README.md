@@ -8,7 +8,7 @@ Aplicação web para importar uma exportação `.txt` de uma conversa do WhatsAp
 - Leitura dos formatos de exportação WhatsApp mais comuns em Android e iOS.
 - Reconhecimento configurável de `IN` e `OUT` (inclui, por defeito, Entrada/Saída e Check in/Check out).
 - Lista configurável de textos de mensagens a ignorar.
-- Exportação idempotente de um ficheiro por cada mês completo (`assiduidade_M_AAAA.txt`).
+- Exportação idempotente de um ficheiro por cada mês completo (`assiduidade_MM_AAAA.txt`).
 - Edição ou remoção auditável de mensagens, guardando uma cópia com o sufixo `_editado`.
 - Análise separada por participante da conversa.
 - Dois períodos configuráveis:
@@ -94,8 +94,9 @@ Para adicionar um novo período, alterar horários, dias úteis ou aliases, não
 
 Os uploads originais são arquivados sem alterações em `data/imports`. Quando uma mensagem
 é editada ou removida, é criada uma cópia com o sufixo `_editado`; o original não é
-substituído. As exportações mensais são guardadas em `data/exports`. Se um nome mensal
-já existir, esse mês é ignorado.
+substituído. Quando o ficheiro segue o nome mensal `assiduidade_MM_AAAA.txt`, o original
+e a cópia `_editado` ficam juntos em `data/exports`. As exportações mensais também são
+guardadas nessa pasta. Se um nome mensal já existir, esse mês é ignorado.
 
 Um mês é considerado completo quando está totalmente contido entre a primeira e a última
 data da conversa. Um mês na extremidade do intervalo só é aceite se o ficheiro cobrir
