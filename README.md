@@ -10,6 +10,7 @@ Aplicação web para importar uma exportação `.txt` de uma conversa do WhatsAp
 - Lista configurável de textos de mensagens a ignorar.
 - Exportação idempotente de um ficheiro por cada mês completo (`assiduidade_MM_AAAA.txt`).
 - Edição ou remoção auditável de mensagens, guardando uma cópia com o sufixo `_editado`.
+- Seletor inicial para reutilizar uma exportação mensal já guardada.
 - Análise separada por participante da conversa.
 - Dois períodos configuráveis:
   - manhã: 09:00–13:30;

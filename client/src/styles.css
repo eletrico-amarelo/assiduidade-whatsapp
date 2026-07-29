@@ -48,6 +48,21 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .ui-badge-warning { color: hsl(32 90% 31%); background: hsl(48 100% 95%); border-color: hsl(45 92% 86%); }
 .ui-badge-danger { color: hsl(0 63% 40%); background: hsl(0 86% 97%); border-color: hsl(0 85% 90%); }
 
+.dialog-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(15 23 42 / .48); backdrop-filter: blur(4px); }
+.startup-dialog { width: min(620px, 100%); max-height: min(720px, calc(100vh - 40px)); padding: 20px; overflow: hidden; box-shadow: 0 24px 60px rgb(15 23 42 / .2); }
+.startup-dialog-heading { display: flex; align-items: flex-start; gap: 13px; }
+.startup-dialog-heading h2 { margin: 0 0 5px; font-size: 1.15rem; letter-spacing: -.025em; }
+.startup-dialog-heading p { margin: 0; color: hsl(var(--muted-foreground)); font-size: .82rem; line-height: 1.5; }
+.dialog-icon { width: 40px; height: 40px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 9px; color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); }
+.stored-file-list { display: grid; gap: 7px; max-height: 430px; margin-top: 18px; overflow-y: auto; }
+.stored-file-list > button { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid hsl(var(--border)); border-radius: 9px; color: hsl(var(--foreground)); background: hsl(var(--background)); text-align: left; transition: background .15s, border-color .15s; }
+.stored-file-list > button:hover:not(:disabled) { border-color: hsl(var(--foreground) / .35); background: hsl(var(--muted) / .6); }
+.stored-file-list > button > span:not(.ui-badge) { min-width: 0; }
+.stored-file-list strong, .stored-file-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stored-file-list strong { font-size: .82rem; }
+.stored-file-list small { margin-top: 3px; color: hsl(var(--muted-foreground)); font-size: .7rem; }
+.startup-dialog-actions { display: flex; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid hsl(var(--border)); }
+
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) 270px; align-items: end; gap: 56px; padding: 76px 0 42px; }
 .hero h1, .result-toolbar h2, .section-heading h2 { letter-spacing: -.045em; }
 .hero h1 { max-width: 800px; margin: 20px 0 18px; font-size: clamp(2.7rem, 6vw, 5.3rem); line-height: .98; font-weight: 700; }
@@ -161,6 +176,9 @@ td small { color: hsl(var(--muted-foreground)); margin-top: 3px; }
 @media (max-width: 640px) {
   .app-shell { width: min(100% - 24px, 1180px); padding-bottom: 48px; }
   .topbar .ui-badge { display: none; }
+  .startup-dialog { padding: 16px; }
+  .stored-file-list > button { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .stored-file-list > button .ui-badge { display: none; }
   .hero { padding: 42px 0 28px; }
   .hero h1 { font-size: 2.7rem; }
   .drop-zone { min-height: 190px; flex-direction: column; text-align: center; padding: 24px; }

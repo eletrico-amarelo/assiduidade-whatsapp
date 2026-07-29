@@ -85,3 +85,10 @@ export interface MonthlyExport {
   filename: string;
   exists: boolean;
 }
+
+export interface StoredExport {
+  filename: string;
+  size: number;
+  updatedAt: string;
+  edited: boolean;
+}

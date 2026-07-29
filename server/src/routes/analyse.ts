@@ -10,6 +10,8 @@ import {
   editImport,
   getMonthlyExportPath,
   getMonthlyExportPlan,
+  listMonthlyExports,
+  readMonthlyExport,
 } from '../storage/imports.js';
 import type { AttendanceConfig } from '../types.js';
 
@@ -55,6 +57,30 @@ analyseRouter.post('/', upload.single('file'), async (request, response, next) =
 analyseRouter.post('/imports/:importId/export-months', async (request, response, next) => {
   try {
     response.json(await createMonthlyExports(request.params.importId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+analyseRouter.get('/exports', async (_request, response, next) => {
+  try {
+    response.json({ files: await listMonthlyExports() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+analyseRouter.post('/exports/:filename/analyse', async (request, response, next) => {
+  try {
+    const content = await readMonthlyExport(request.params.filename);
+    const config = parseConfigValue(request.body.config);
+    const messages = parseWhatsAppExport(content);
+    const archived = await archiveImport(request.params.filename, content);
+    response.json(analyseAttendance(archived.filename, messages, config, {
+      importId: archived.importId,
+      monthlyExports: await getMonthlyExportPlan(messages),
+      editedFilename: /_editado\.txt$/i.test(archived.filename) ? archived.filename : undefined,
+    }));
   } catch (error) {
     next(error);
   }

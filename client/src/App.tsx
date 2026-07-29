@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowRight,
   CalendarDays,
@@ -6,8 +6,10 @@ import {
   ChevronDown,
   Clock3,
   FileText,
+  FolderOpen,
   Download,
   Pencil,
+  Plus,
   Save,
   Settings2,
   Trash2,
@@ -25,7 +27,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { analyseFile, changeImportedMessages, exportCompleteMonths } from './api';
+import {
+  analyseFile,
+  analyseStoredExport,
+  changeImportedMessages,
+  exportCompleteMonths,
+  listStoredExports,
+} from './api';
 import { Badge, Button, Card } from './components/ui';
 import type {
   AnalysisResponse,
@@ -33,6 +41,7 @@ import type {
   AttendanceDay,
   DayStatus,
   PeriodRule,
+  StoredExport,
 } from './types';
 
 const DEFAULT_CONFIG: AttendanceConfig = {
@@ -92,6 +101,24 @@ function App() {
   const [editingText, setEditingText] = useState('');
   const [actionMessage, setActionMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [storedExports, setStoredExports] = useState<StoredExport[]>([]);
+  const [showFileChooser, setShowFileChooser] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    listStoredExports()
+      .then((files) => {
+        if (!active) return;
+        setStoredExports(files);
+        setShowFileChooser(files.length > 0);
+      })
+      .catch(() => {
+        // A consulta inicial não deve impedir uma nova importação.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const selectedDays = useMemo(
     () => result?.days.filter((day) => day.participant === participant) ?? [],
@@ -155,6 +182,22 @@ function App() {
     }
   }
 
+  async function openStoredExport(filename: string) {
+    setIsLoading(true);
+    setError('');
+    try {
+      const analysis = await analyseStoredExport(filename, config);
+      setResult(analysis);
+      setParticipant(analysis.participants[0] ?? '');
+      setShowFileChooser(false);
+      setActionMessage(`${filename} aberto sem alterar o ficheiro guardado.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível abrir o ficheiro.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function saveMessageChange(sourceLine: number, change: { text?: string; remove?: boolean }) {
     if (!result) return;
     setIsSaving(true);
@@ -199,6 +242,49 @@ function App() {
 
   return (
     <main className="app-shell">
+      {showFileChooser && (
+        <div className="dialog-backdrop" role="presentation">
+          <Card className="startup-dialog" role="dialog" aria-modal="true" aria-labelledby="startup-dialog-title">
+            <div className="startup-dialog-heading">
+              <span className="dialog-icon"><FolderOpen size={21} /></span>
+              <div>
+                <h2 id="startup-dialog-title">Continuar com um ficheiro existente?</h2>
+                <p>Encontrámos exportações guardadas. Podes abrir uma delas ou iniciar uma nova importação.</p>
+              </div>
+            </div>
+            <div className="stored-file-list">
+              {storedExports.map((storedFile) => (
+                <button
+                  key={storedFile.filename}
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => void openStoredExport(storedFile.filename)}
+                >
+                  <FileText size={18} />
+                  <span>
+                    <strong>{storedFile.filename}</strong>
+                    <small>
+                      {(storedFile.size / 1024).toFixed(1)} KB · {new Intl.DateTimeFormat('pt-PT', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      }).format(new Date(storedFile.updatedAt))}
+                    </small>
+                  </span>
+                  {storedFile.edited && <Badge variant="warning">Editado</Badge>}
+                  <ArrowRight size={16} />
+                </button>
+              ))}
+            </div>
+            <div className="startup-dialog-actions">
+              <Button variant="outline" type="button" onClick={() => setShowFileChooser(false)}>
+                <Plus size={16} /> Nova importação
+              </Button>
+            </div>
+            {error && <div className="error-message" role="alert">{error}</div>}
+          </Card>
+        </div>
+      )}
+
       <nav className="topbar">
         <a className="brand" href="/" aria-label="Ponto início">
           <span className="brand-mark"><Clock3 size={18} /></span>

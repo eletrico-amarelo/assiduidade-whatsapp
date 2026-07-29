@@ -1,4 +1,4 @@
-import type { AnalysisResponse, AttendanceConfig } from './types';
+import type { AnalysisResponse, AttendanceConfig, StoredExport } from './types';
 
 export async function analyseFile(file: File, config: AttendanceConfig): Promise<AnalysisResponse> {
   const form = new FormData();
@@ -43,6 +43,26 @@ export async function changeImportedMessages(
   const payload = (await response.json()) as AnalysisResponse | { error?: string };
   if (!response.ok) {
     throw new Error('error' in payload && payload.error ? payload.error : 'Não foi possível guardar as alterações.');
+  }
+  return payload as AnalysisResponse;
+}
+
+export async function listStoredExports(): Promise<StoredExport[]> {
+  const response = await fetch('/api/analyse/exports');
+  const payload = (await response.json()) as { files?: StoredExport[]; error?: string };
+  if (!response.ok) throw new Error(payload.error ?? 'Não foi possível consultar os ficheiros exportados.');
+  return payload.files ?? [];
+}
+
+export async function analyseStoredExport(filename: string, config: AttendanceConfig) {
+  const response = await fetch(`/api/analyse/exports/${encodeURIComponent(filename)}/analyse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ config }),
+  });
+  const payload = (await response.json()) as AnalysisResponse | { error?: string };
+  if (!response.ok) {
+    throw new Error('error' in payload && payload.error ? payload.error : 'Não foi possível abrir o ficheiro.');
   }
   return payload as AnalysisResponse;
 }

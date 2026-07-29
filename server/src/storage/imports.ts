@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseWhatsAppExport } from '../parser/whatsapp.js';
@@ -61,10 +61,30 @@ export async function createMonthlyExports(importId: string) {
 }
 
 export function getMonthlyExportPath(filename: string) {
-  if (!/^assiduidade_(?:0[1-9]|1[0-2])_\d{4}\.txt$/.test(filename)) {
+  if (!isMonthlyFilename(filename)) {
     throw new Error('Nome de exportação inválido.');
   }
   return path.join(exportsDirectory, filename);
+}
+
+export async function listMonthlyExports() {
+  await mkdir(exportsDirectory, { recursive: true });
+  const entries = await readdir(exportsDirectory);
+  const files = entries.filter(isMonthlyFilename);
+  const details = await Promise.all(files.map(async (filename) => {
+    const info = await stat(path.join(exportsDirectory, filename));
+    return {
+      filename,
+      size: info.size,
+      updatedAt: info.mtime.toISOString(),
+      edited: /_editado\.txt$/i.test(filename),
+    };
+  }));
+  return details.sort((a, b) => b.filename.localeCompare(a.filename, 'pt'));
+}
+
+export async function readMonthlyExport(filename: string) {
+  return readFile(getMonthlyExportPath(filename), 'utf8');
 }
 
 export async function editImport(
@@ -172,7 +192,7 @@ function withEditedSuffix(filename: string) {
 }
 
 function isMonthlyFilename(filename: string) {
-  return /^assiduidade_(?:0[1-9]|1[0-2])_\d{4}\.txt$/i.test(filename);
+  return /^assiduidade_(?:0[1-9]|1[0-2])_\d{4}(?:_editado)?\.txt$/i.test(filename);
 }
 
 export function monthlyFilename(month: number, year: number) {
