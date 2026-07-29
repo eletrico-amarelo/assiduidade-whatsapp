@@ -66,3 +66,49 @@ export async function analyseStoredExport(filename: string, config: AttendanceCo
   }
   return payload as AnalysisResponse;
 }
+
+export async function loadRules(): Promise<{
+  config: AttendanceConfig;
+  source: 'saved' | 'default';
+}> {
+  const response = await fetch('/api/rules');
+  const payload = (await response.json()) as {
+    config?: AttendanceConfig;
+    source?: 'saved' | 'default';
+    error?: string;
+  };
+  if (!response.ok || !payload.config || !payload.source) {
+    throw new Error(payload.error ?? 'Não foi possível carregar as regras.');
+  }
+  return { config: payload.config, source: payload.source };
+}
+
+export async function saveRules(config: AttendanceConfig) {
+  const response = await fetch('/api/rules', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  const payload = (await response.json()) as {
+    config?: AttendanceConfig;
+    source?: 'saved' | 'default';
+    error?: string;
+  };
+  if (!response.ok || !payload.config || !payload.source) {
+    throw new Error(payload.error ?? 'Não foi possível guardar as regras.');
+  }
+  return { config: payload.config, source: payload.source };
+}
+
+export async function resetRules() {
+  const response = await fetch('/api/rules', { method: 'DELETE' });
+  const payload = (await response.json()) as {
+    config?: AttendanceConfig;
+    source?: 'saved' | 'default';
+    error?: string;
+  };
+  if (!response.ok || !payload.config || !payload.source) {
+    throw new Error(payload.error ?? 'Não foi possível repor as regras.');
+  }
+  return { config: payload.config, source: payload.source };
+}

@@ -4,6 +4,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyseRouter } from './routes/analyse.js';
+import { rulesRouter } from './routes/rules.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
@@ -20,6 +21,7 @@ app.get('/api/health', (_request, response) => {
 });
 
 app.use('/api/analyse', analyseRouter);
+app.use('/api/rules', rulesRouter);
 
 app.use(express.static(clientDist));
 app.get('/{*path}', (request, response, next) => {
@@ -31,7 +33,8 @@ app.get('/{*path}', (request, response, next) => {
 
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   const message = error instanceof Error ? error.message : 'Erro interno inesperado.';
-  const status = message.includes('ficheiro') || message.includes('período') || message.includes('Hora') ? 400 : 500;
+  const invalidRequestTerms = ['ficheiro', 'período', 'Hora', 'férias', 'tolerância', 'aliases', 'dias úteis'];
+  const status = invalidRequestTerms.some((term) => message.includes(term)) ? 400 : 500;
   console.error(error);
   response.status(status).json({ error: message });
 });

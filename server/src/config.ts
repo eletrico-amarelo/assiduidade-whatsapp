@@ -11,5 +11,6 @@ export const defaultConfig: AttendanceConfig = {
   },
   ignoredMessagePatterns: [],
   toleranceMinutes: 15,
+  vacations: [],
   workingDays: [1, 2, 3, 4, 5],
 };

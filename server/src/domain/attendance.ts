@@ -122,8 +122,10 @@ function buildParticipantDays(
     .filter((date) => config.workingDays.includes(dayOfWeek(date)))
     .map((date) => {
       const holidayName = getPortugueseNationalHolidayName(date);
-      return holidayName
-        ? evaluateHoliday(participant, date, config, holidayName)
+      if (holidayName) return evaluateHoliday(participant, date, config, holidayName);
+      const vacation = findVacation(participant, date, config);
+      return vacation
+        ? evaluateVacation(participant, date, config, vacation.description)
         : evaluateDay(participant, date, byDate.get(date) ?? [], config);
     });
 }
@@ -151,6 +153,41 @@ function evaluateHoliday(
     issues: [`Feriado nacional: ${holidayName}`],
     holidayName,
   };
+}
+
+function evaluateVacation(
+  participant: string,
+  date: string,
+  config: AttendanceConfig,
+  description?: string,
+): AttendanceDay {
+  return {
+    participant,
+    date,
+    weekday: weekdayLabel(date),
+    status: 'vacation',
+    score: 100,
+    periods: config.periods.map((period) => ({
+      periodId: period.id,
+      label: period.label,
+      complete: false,
+      punchCount: 0,
+      issues: [],
+    })),
+    outsidePeriod: [],
+    issues: [description ? `Férias: ${description}` : 'Férias'],
+    vacationDescription: description,
+  };
+}
+
+function findVacation(participant: string, date: string, config: AttendanceConfig) {
+  const participantKey = normaliseText(participant);
+  return config.vacations.find(
+    (vacation) =>
+      normaliseText(vacation.participant) === participantKey
+      && vacation.from <= date
+      && vacation.to >= date,
+  );
 }
 
 function evaluateDay(
@@ -250,7 +287,10 @@ function evaluatePeriod(periodId: string, label: string, punches: Punch[]): Peri
 
 function summariseParticipant(participant: string, days: AttendanceDay[]): ParticipantSummary {
   const participantDays = days.filter(
-    (day) => day.participant === participant && day.status !== 'holiday',
+    (day) =>
+      day.participant === participant
+      && day.status !== 'holiday'
+      && day.status !== 'vacation',
   );
   const completeDays = participantDays.filter((day) => day.status === 'complete').length;
   const partialDays = participantDays.filter((day) => day.status === 'partial').length;
@@ -281,11 +321,40 @@ function resolveDayStatus(punchCount: number, completePeriods: number, periodCou
   return 'partial' as const;
 }
 
-function validateConfig(config: AttendanceConfig) {
+export function validateConfig(config: AttendanceConfig) {
   if (!Array.isArray(config.periods) || config.periods.length === 0) throw new Error('É necessário configurar pelo menos um período.');
   if (!Array.isArray(config.workingDays) || config.workingDays.length === 0) throw new Error('Seleciona pelo menos um dia útil.');
   if (!Number.isInteger(config.toleranceMinutes) || config.toleranceMinutes < 0 || config.toleranceMinutes > 120) {
     throw new Error('A tolerância deve ser um número inteiro entre 0 e 120 minutos.');
+  }
+  if (!Array.isArray(config.aliases.in) || !Array.isArray(config.aliases.out)) {
+    throw new Error('Os aliases de IN e OUT são obrigatórios.');
+  }
+  if (!Array.isArray(config.vacations)) throw new Error('A lista de férias é inválida.');
+
+  const vacationsByParticipant = new Map<string, typeof config.vacations>();
+  for (const vacation of config.vacations) {
+    if (!vacation.id?.trim() || !vacation.participant?.trim()) {
+      throw new Error('Cada período de férias precisa de identificador e participante.');
+    }
+    if (!isIsoDate(vacation.from) || !isIsoDate(vacation.to) || vacation.from > vacation.to) {
+      throw new Error(`Período de férias inválido para ${vacation.participant}.`);
+    }
+    const key = normaliseText(vacation.participant);
+    const periods = vacationsByParticipant.get(key) ?? [];
+    periods.push(vacation);
+    vacationsByParticipant.set(key, periods);
+  }
+
+  for (const periods of vacationsByParticipant.values()) {
+    const sortedVacations = [...periods].sort((a, b) => a.from.localeCompare(b.from));
+    for (let index = 1; index < sortedVacations.length; index += 1) {
+      const previous = sortedVacations[index - 1];
+      const current = sortedVacations[index];
+      if (previous && current && current.from <= previous.to) {
+        throw new Error(`Existem períodos de férias sobrepostos para ${current.participant}.`);
+      }
+    }
   }
 
   const sorted = config.periods

@@ -12,6 +12,8 @@ Aplicação web para importar uma exportação `.txt` de uma conversa do WhatsAp
 - Edição ou remoção auditável de mensagens, guardando uma cópia com o sufixo `_editado`.
 - Seletor inicial para reutilizar uma exportação mensal já guardada.
 - Visualização do ficheiro atualmente em tratamento num novo separador.
+- Regras persistentes editáveis na aplicação, com escrita atómica e backup.
+- Períodos de férias por participante, visíveis no gráfico e excluídos das métricas.
 - Análise separada por participante da conversa.
 - Dois períodos configuráveis:
   - manhã: 08:00–13:30;
@@ -105,3 +107,18 @@ guardadas nessa pasta. Se um nome mensal já existir, esse mês é ignorado.
 Um mês é considerado completo quando está totalmente contido entre a primeira e a última
 data da conversa. Um mês na extremidade do intervalo só é aceite se o ficheiro cobrir
 desde o primeiro até ao último dia desse mês.
+
+### Regras
+
+As regras são guardadas em `data/config/regras.json`. Enquanto esse ficheiro não existir,
+a aplicação usa as regras iniciais. Depois de ser criado através de “Guardar regras”, o
+ficheiro passa a ser a única fonte de configuração para todas as análises.
+
+Antes de substituir uma configuração existente, a aplicação guarda
+`data/config/regras.backup.json`. A escrita utiliza um ficheiro temporário e uma operação
+de substituição atómica, evitando deixar um JSON parcialmente escrito.
+
+Os períodos de férias incluem participante, data inicial, data final e uma descrição
+opcional. Aparecem no gráfico com estado próprio e não são contabilizados como dias
+completos, incompletos ou sem registos. Feriados nacionais têm prioridade quando
+coincidem com férias.

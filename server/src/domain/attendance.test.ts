@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { defaultConfig } from '../config.js';
-import { analyseAttendance } from './attendance.js';
+import { analyseAttendance, validateConfig } from './attendance.js';
 import { parseWhatsAppExport } from '../parser/whatsapp.js';
 
 test('marks a day complete only with both ordered pairs', () => {
@@ -112,6 +112,44 @@ test('does not count Portuguese national holidays as attendance days', () => {
     ],
   );
   assert.equal(result.summaries[0]?.totalDays, 2);
+});
+
+test('shows participant vacations without counting them in attendance totals', () => {
+  const content = [
+    '03/08/2026, 08:01 - Ana Silva: IN',
+    '03/08/2026, 13:20 - Ana Silva: OUT',
+    '03/08/2026, 13:31 - Ana Silva: IN',
+    '03/08/2026, 19:00 - Ana Silva: OUT',
+  ].join('\n');
+  const config = {
+    ...defaultConfig,
+    dateFrom: '2026-08-03',
+    dateTo: '2026-08-05',
+    vacations: [{
+      id: 'ferias-ana',
+      participant: 'ana silva',
+      from: '2026-08-04',
+      to: '2026-08-05',
+      description: 'Férias de verão',
+    }],
+  };
+
+  const result = analyseAttendance('chat.txt', parseWhatsAppExport(content), config);
+
+  assert.deepEqual(result.days.map((day) => day.status), ['complete', 'vacation', 'vacation']);
+  assert.equal(result.days[1]?.vacationDescription, 'Férias de verão');
+  assert.equal(result.summaries[0]?.totalDays, 1);
+  assert.equal(result.summaries[0]?.attendanceRate, 100);
+});
+
+test('rejects overlapping vacations for the same participant', () => {
+  assert.throws(() => validateConfig({
+    ...defaultConfig,
+    vacations: [
+      { id: 'one', participant: 'Ana', from: '2026-08-01', to: '2026-08-10' },
+      { id: 'two', participant: 'ana', from: '2026-08-10', to: '2026-08-15' },
+    ],
+  }), /sobrepostos/);
 });
 
 test('returns the messages that were not recognised as punches', () => {

@@ -15,6 +15,7 @@ import {
   readMonthlyExport,
 } from '../storage/imports.js';
 import type { AttendanceConfig } from '../types.js';
+import { loadRules } from '../storage/rules.js';
 
 const maxUploadMb = Number(process.env.MAX_UPLOAD_MB ?? 5);
 const upload = multer({
@@ -39,7 +40,7 @@ analyseRouter.post('/', upload.single('file'), async (request, response, next) =
       return;
     }
 
-    const config = parseConfig(request.body.config);
+    const config = await resolveConfig(request.body.config);
     const content = decodeTextFile(request.file.buffer);
     const messages = parseWhatsAppExport(content);
     const archived = await archiveImport(request.file.originalname, content);
@@ -86,7 +87,7 @@ analyseRouter.get('/exports', async (_request, response, next) => {
 analyseRouter.post('/exports/:filename/analyse', async (request, response, next) => {
   try {
     const content = await readMonthlyExport(request.params.filename);
-    const config = parseConfigValue(request.body.config);
+    const config = await resolveConfigValue(request.body.config);
     const messages = parseWhatsAppExport(content);
     const archived = await archiveImport(request.params.filename, content);
     response.json(analyseAttendance(archived.filename, messages, config, {
@@ -112,7 +113,7 @@ analyseRouter.get('/exports/:filename', (request, response, next) => {
 analyseRouter.patch('/imports/:importId/messages', async (request, response, next) => {
   try {
     const changes = parseChanges(request.body.changes);
-    const config = parseConfigValue(request.body.config);
+    const config = await resolveConfigValue(request.body.config);
     const edited = await editImport(request.params.importId, changes);
     const messages = parseWhatsAppExport(edited.content);
     const monthlyExports = await getMonthlyExportPlan(messages);
@@ -131,6 +132,16 @@ function parseConfig(value: unknown): AttendanceConfig {
   return parseConfigValue(JSON.parse(value));
 }
 
+async function resolveConfig(value: unknown) {
+  const rules = await loadRules();
+  return rules.source === 'saved' ? rules.config : parseConfig(value);
+}
+
+async function resolveConfigValue(value: unknown) {
+  const rules = await loadRules();
+  return rules.source === 'saved' ? rules.config : parseConfigValue(value);
+}
+
 function parseConfigValue(value: unknown): AttendanceConfig {
   const parsed = (value && typeof value === 'object' ? value : {}) as Partial<AttendanceConfig>;
   return {
@@ -145,6 +156,7 @@ function parseConfigValue(value: unknown): AttendanceConfig {
     toleranceMinutes: Number.isFinite(parsed.toleranceMinutes)
       ? Number(parsed.toleranceMinutes)
       : defaultConfig.toleranceMinutes,
+    vacations: Array.isArray(parsed.vacations) ? parsed.vacations : defaultConfig.vacations,
     workingDays: Array.isArray(parsed.workingDays) ? parsed.workingDays : defaultConfig.workingDays,
     dateFrom: parsed.dateFrom || undefined,
     dateTo: parsed.dateTo || undefined,

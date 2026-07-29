@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowRight,
   CalendarDays,
+  CalendarOff,
   CheckCircle2,
   ChevronDown,
   Clock3,
@@ -11,6 +12,7 @@ import {
   Eye,
   Pencil,
   Plus,
+  RotateCcw,
   Save,
   Settings2,
   Trash2,
@@ -34,6 +36,9 @@ import {
   changeImportedMessages,
   exportCompleteMonths,
   listStoredExports,
+  loadRules,
+  resetRules as resetStoredRules,
+  saveRules as saveStoredRules,
 } from './api';
 import { Badge, Button, Card } from './components/ui';
 import type {
@@ -56,6 +61,7 @@ const DEFAULT_CONFIG: AttendanceConfig = {
   },
   ignoredMessagePatterns: [],
   toleranceMinutes: 15,
+  vacations: [],
   workingDays: [1, 2, 3, 4, 5],
 };
 
@@ -74,6 +80,7 @@ const statusMeta: Record<DayStatus, { label: string; colour: string }> = {
   partial: { label: 'Incompleto', colour: '#ffb347' },
   absent: { label: 'Sem registos', colour: '#ef6673' },
   holiday: { label: 'Feriado', colour: '#b85445' },
+  vacation: { label: 'Férias', colour: '#3b82f6' },
 };
 
 function formatDate(date: string) {
@@ -108,9 +115,22 @@ function App() {
   const [showFileChooser, setShowFileChooser] = useState(false);
   const [inAliasesText, setInAliasesText] = useState(DEFAULT_CONFIG.aliases.in.join(', '));
   const [outAliasesText, setOutAliasesText] = useState(DEFAULT_CONFIG.aliases.out.join(', '));
+  const [rulesSource, setRulesSource] = useState<'saved' | 'default'>('default');
+  const [isSavingRules, setIsSavingRules] = useState(false);
 
   useEffect(() => {
     let active = true;
+    loadRules()
+      .then((rules) => {
+        if (!active) return;
+        setConfig(rules.config);
+        setInAliasesText(rules.config.aliases.in.join(', '));
+        setOutAliasesText(rules.config.aliases.out.join(', '));
+        setRulesSource(rules.source);
+      })
+      .catch((cause) => {
+        if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar as regras.');
+      });
     listStoredExports()
       .then((files) => {
         if (!active) return;
@@ -220,6 +240,71 @@ function App() {
     }
   }
 
+  async function persistRules() {
+    setIsSavingRules(true);
+    setError('');
+    try {
+      const saved = await saveStoredRules(config);
+      setConfig(saved.config);
+      setRulesSource(saved.source);
+      setActionMessage('Regras guardadas em data/config/regras.json. Serão usadas nas próximas análises.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível guardar as regras.');
+    } finally {
+      setIsSavingRules(false);
+    }
+  }
+
+  async function restoreDefaultRules() {
+    if (!window.confirm('Repor as regras iniciais? A configuração atual será mantida num ficheiro de backup.')) return;
+    setIsSavingRules(true);
+    setError('');
+    try {
+      const restored = await resetStoredRules();
+      setConfig(restored.config);
+      setInAliasesText(restored.config.aliases.in.join(', '));
+      setOutAliasesText(restored.config.aliases.out.join(', '));
+      setRulesSource(restored.source);
+      setActionMessage('Regras iniciais repostas. A configuração anterior foi guardada como backup.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível repor as regras.');
+    } finally {
+      setIsSavingRules(false);
+    }
+  }
+
+  function addVacation() {
+    setConfig((current) => ({
+      ...current,
+      vacations: [
+        ...current.vacations,
+        {
+          id: crypto.randomUUID(),
+          participant: participant || current.vacations[0]?.participant || '',
+          from: '',
+          to: '',
+          description: '',
+        },
+      ],
+    }));
+  }
+
+  function updateVacation(id: string, patch: Partial<AttendanceConfig['vacations'][number]>) {
+    setConfig((current) => ({
+      ...current,
+      vacations: current.vacations.map((vacation) =>
+        vacation.id === id ? { ...vacation, ...patch } : vacation,
+      ),
+    }));
+  }
+
+  function removeVacation(id: string) {
+    setConfig((current) => ({
+      ...current,
+      vacations: current.vacations.filter((vacation) => vacation.id !== id),
+    }));
+  }
+
   function updatePeriod(index: number, patch: Partial<PeriodRule>) {
     setConfig((current) => ({
       ...current,
@@ -244,6 +329,7 @@ function App() {
     score: day.score,
     status: day.status,
     holidayName: day.holidayName,
+    vacationDescription: day.vacationDescription,
   }));
 
   return (
@@ -364,7 +450,24 @@ function App() {
         </div>
 
         {showRules && (
-          <div className="rules-grid">
+          <>
+            <div className="rules-toolbar">
+              <div>
+                <strong>Configuração de regras</strong>
+                <Badge variant={rulesSource === 'saved' ? 'success' : 'secondary'}>
+                  {rulesSource === 'saved' ? 'regras.json ativo' : 'regras iniciais'}
+                </Badge>
+              </div>
+              <div>
+                <Button variant="outline" type="button" disabled={isSavingRules} onClick={() => void restoreDefaultRules()}>
+                  <RotateCcw size={15} /> Repor iniciais
+                </Button>
+                <Button type="button" disabled={isSavingRules} onClick={() => void persistRules()}>
+                  <Save size={15} /> {isSavingRules ? 'A guardar…' : 'Guardar regras'}
+                </Button>
+              </div>
+            </div>
+            <div className="rules-grid">
             <div className="rule-card">
               <h2>Períodos</h2>
               {config.periods.map((period, index) => (
@@ -479,7 +582,56 @@ function App() {
                 />
               </label>
             </div>
-          </div>
+
+            <div className="rule-card vacations-card">
+              <div className="vacations-heading">
+                <div>
+                  <h2>Férias dos participantes</h2>
+                  <p>Os dias de férias aparecem no gráfico mas não contam para a taxa de assiduidade.</p>
+                </div>
+                <Button variant="outline" type="button" onClick={addVacation}>
+                  <Plus size={15} /> Adicionar férias
+                </Button>
+              </div>
+              {config.vacations.length === 0 ? (
+                <div className="vacations-empty"><CalendarOff size={20} /> Ainda não existem períodos de férias.</div>
+              ) : (
+                <div className="vacations-list">
+                  {config.vacations.map((vacation) => (
+                    <div className="vacation-row" key={vacation.id}>
+                      <label>
+                        Participante
+                        <input
+                          list="participant-names"
+                          value={vacation.participant}
+                          onChange={(event) => updateVacation(vacation.id, { participant: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        De
+                        <input type="date" value={vacation.from} onChange={(event) => updateVacation(vacation.id, { from: event.target.value })} />
+                      </label>
+                      <label>
+                        Até
+                        <input type="date" value={vacation.to} onChange={(event) => updateVacation(vacation.id, { to: event.target.value })} />
+                      </label>
+                      <label>
+                        Descrição
+                        <input value={vacation.description ?? ''} onChange={(event) => updateVacation(vacation.id, { description: event.target.value })} />
+                      </label>
+                      <Button variant="outline" size="icon" type="button" aria-label="Remover férias" onClick={() => removeVacation(vacation.id)}>
+                        <Trash2 size={15} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <datalist id="participant-names">
+                {result?.participants.map((name) => <option key={name} value={name} />)}
+              </datalist>
+            </div>
+            </div>
+          </>
         )}
 
         {error && <div className="error-message" role="alert">{error}</div>}
@@ -700,7 +852,7 @@ function SummaryCard({ icon, label, value, accent = 'default' }: { icon: ReactNo
   );
 }
 
-function AttendanceTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { fullDate: string; score: number; status: DayStatus; holidayName?: string } }> }) {
+function AttendanceTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { fullDate: string; score: number; status: DayStatus; holidayName?: string; vacationDescription?: string } }> }) {
   if (!active || !payload?.[0]) return null;
   const entry = payload[0].payload;
   return (
@@ -709,7 +861,9 @@ function AttendanceTooltip({ active, payload }: { active?: boolean; payload?: Ar
       <span>
         {entry.status === 'holiday'
           ? `Feriado nacional · ${entry.holidayName ?? ''}`
-          : `${statusMeta[entry.status].label} · ${entry.score}%`}
+          : entry.status === 'vacation'
+            ? `Férias${entry.vacationDescription ? ` · ${entry.vacationDescription}` : ''}`
+            : `${statusMeta[entry.status].label} · ${entry.score}%`}
       </span>
     </div>
   );
@@ -724,7 +878,7 @@ function AttendanceRow({ day }: { day: AttendanceDay }) {
       </td>
       {day.periods.map((period) => (
         <td key={period.periodId}>
-          <div className={`period-pill ${day.status === 'holiday' ? 'holiday' : period.complete ? 'complete' : 'incomplete'}`}>
+          <div className={`period-pill ${day.status === 'holiday' ? 'holiday' : day.status === 'vacation' ? 'vacation' : period.complete ? 'complete' : 'incomplete'}`}>
             <span>{period.inTime ?? '—'}</span>
             <i>→</i>
             <span>{period.outTime ?? '—'}</span>
@@ -733,7 +887,11 @@ function AttendanceRow({ day }: { day: AttendanceDay }) {
       ))}
       <td><span className={`status-badge ${day.status}`}>{statusMeta[day.status].label}</span></td>
       <td className="issues-cell">
-        {day.holidayName ? `Feriado nacional: ${day.holidayName}` : day.issues.length ? day.issues.join(' · ') : 'Sem ocorrências'}
+        {day.holidayName
+          ? `Feriado nacional: ${day.holidayName}`
+          : day.status === 'vacation'
+            ? `Férias${day.vacationDescription ? `: ${day.vacationDescription}` : ''}`
+            : day.issues.length ? day.issues.join(' · ') : 'Sem ocorrências'}
       </td>
     </tr>
   );
