@@ -1,5 +1,5 @@
 export type PunchKind = 'IN' | 'OUT';
-export type DayStatus = 'complete' | 'partial' | 'absent';
+export type DayStatus = 'complete' | 'partial' | 'absent' | 'holiday';
 
 export interface PeriodRule {
   id: string;
@@ -15,6 +15,7 @@ export interface AttendanceConfig {
     out: string[];
   };
   ignoredMessagePatterns: string[];
+  toleranceMinutes: number;
   workingDays: number[];
   dateFrom?: string;
   dateTo?: string;
@@ -43,6 +44,7 @@ export interface AttendanceDay {
     message: string;
   }>;
   issues: string[];
+  holidayName?: string;
 }
 
 export interface ParticipantSummary {

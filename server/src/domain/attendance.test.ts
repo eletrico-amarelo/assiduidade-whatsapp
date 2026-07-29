@@ -30,6 +30,55 @@ test('marks missing afternoon OUT as partial', () => {
   assert.match(result.days[0]?.issues.join(' ') ?? '', /falta OUT/);
 });
 
+test('assigns OUT and IN at the shared 13:30 boundary to different periods', () => {
+  const content = [
+    '20/07/2026, 08:01 - Ana: IN',
+    '20/07/2026, 13:30 - Ana: OUT',
+    '20/07/2026, 13:30 - Ana: IN',
+    '20/07/2026, 19:59 - Ana: OUT',
+  ].join('\n');
+
+  const result = analyseAttendance('chat.txt', parseWhatsAppExport(content), defaultConfig);
+
+  assert.equal(result.days[0]?.status, 'complete');
+  assert.deepEqual(
+    result.days[0]?.periods.map((period) => [period.inTime, period.outTime]),
+    [['08:01', '13:30'], ['13:30', '19:59']],
+  );
+});
+
+test('accepts punches up to 15 minutes outside each period', () => {
+  const content = [
+    '20/07/2026, 07:45 - Ana: IN',
+    '20/07/2026, 13:40 - Ana: OUT',
+    '20/07/2026, 13:20 - Ana: IN',
+    '20/07/2026, 20:15 - Ana: OUT',
+  ].join('\n');
+
+  const result = analyseAttendance('chat.txt', parseWhatsAppExport(content), defaultConfig);
+
+  assert.equal(result.days[0]?.status, 'complete');
+  assert.equal(result.days[0]?.outsidePeriod.length, 0);
+  assert.deepEqual(
+    result.days[0]?.periods.map((period) => [period.inTime, period.outTime]),
+    [['07:45', '13:40'], ['13:20', '20:15']],
+  );
+});
+
+test('keeps punches beyond the tolerance outside configured periods', () => {
+  const content = [
+    '20/07/2026, 07:44 - Ana: IN',
+    '20/07/2026, 13:20 - Ana: OUT',
+    '20/07/2026, 13:31 - Ana: IN',
+    '20/07/2026, 20:16 - Ana: OUT',
+  ].join('\n');
+
+  const result = analyseAttendance('chat.txt', parseWhatsAppExport(content), defaultConfig);
+
+  assert.equal(result.days[0]?.status, 'partial');
+  assert.equal(result.days[0]?.outsidePeriod.length, 2);
+});
+
 test('adds absent weekdays inside an explicit date range', () => {
   const content = [
     '20/07/2026, 09:01 - Ana: IN',
@@ -41,6 +90,28 @@ test('adds absent weekdays inside an explicit date range', () => {
 
   const result = analyseAttendance('chat.txt', parseWhatsAppExport(content), config);
   assert.deepEqual(result.days.map((day) => day.status), ['complete', 'absent', 'absent']);
+});
+
+test('does not count Portuguese national holidays as attendance days', () => {
+  const content = [
+    '30/04/2026, 08:01 - Ana: IN',
+    '30/04/2026, 13:20 - Ana: OUT',
+    '30/04/2026, 13:31 - Ana: IN',
+    '30/04/2026, 19:00 - Ana: OUT',
+  ].join('\n');
+  const config = { ...defaultConfig, dateFrom: '2026-04-30', dateTo: '2026-05-04' };
+
+  const result = analyseAttendance('chat.txt', parseWhatsAppExport(content), config);
+
+  assert.deepEqual(
+    result.days.map((day) => [day.date, day.status]),
+    [
+      ['2026-04-30', 'complete'],
+      ['2026-05-01', 'holiday'],
+      ['2026-05-04', 'absent'],
+    ],
+  );
+  assert.equal(result.summaries[0]?.totalDays, 2);
 });
 
 test('returns the messages that were not recognised as punches', () => {

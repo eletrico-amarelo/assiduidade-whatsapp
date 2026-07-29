@@ -80,11 +80,19 @@ export async function listMonthlyExports() {
       edited: /_editado\.txt$/i.test(filename),
     };
   }));
-  return details.sort((a, b) => b.filename.localeCompare(a.filename, 'pt'));
+  return details.sort(compareStoredExports);
 }
 
 export async function readMonthlyExport(filename: string) {
   return readFile(getMonthlyExportPath(filename), 'utf8');
+}
+
+export async function readActiveImportFile(importId: string) {
+  const { content, metadata } = await readActiveImport(importId);
+  return {
+    content,
+    filename: metadata.editedFilename ?? metadata.filename,
+  };
 }
 
 export async function editImport(
@@ -197,6 +205,23 @@ function isMonthlyFilename(filename: string) {
 
 export function monthlyFilename(month: number, year: number) {
   return `assiduidade_${String(month).padStart(2, '0')}_${year}.txt`;
+}
+
+export function compareStoredExports(
+  a: { filename: string; edited: boolean; updatedAt: string },
+  b: { filename: string; edited: boolean; updatedAt: string },
+) {
+  const aDate = monthlyFilenameDate(a.filename);
+  const bDate = monthlyFilenameDate(b.filename);
+  if (aDate !== bDate) return bDate - aDate;
+  if (a.edited !== b.edited) return a.edited ? -1 : 1;
+  return b.updatedAt.localeCompare(a.updatedAt);
+}
+
+function monthlyFilenameDate(filename: string) {
+  const match = /^assiduidade_(\d{2})_(\d{4})/i.exec(filename);
+  if (!match) return 0;
+  return Number(match[2]) * 100 + Number(match[1]);
 }
 
 async function fileExists(filename: string) {

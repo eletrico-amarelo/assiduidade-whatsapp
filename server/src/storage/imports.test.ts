@@ -1,11 +1,30 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseWhatsAppExport } from '../parser/whatsapp.js';
-import { monthlyFilename, resolveCompleteMonths } from './imports.js';
+import { compareStoredExports, monthlyFilename, resolveCompleteMonths } from './imports.js';
 
 test('formats the month with two digits in monthly filenames', () => {
   assert.equal(monthlyFilename(5, 2024), 'assiduidade_05_2024.txt');
   assert.equal(monthlyFilename(12, 2024), 'assiduidade_12_2024.txt');
+});
+
+test('sorts stored exports by year and month with the newest first', () => {
+  const files = [
+    { filename: 'assiduidade_12_2025.txt', edited: false, updatedAt: '2026-01-01T00:00:00.000Z' },
+    { filename: 'assiduidade_01_2026.txt', edited: false, updatedAt: '2026-01-02T00:00:00.000Z' },
+    { filename: 'assiduidade_05_2024.txt', edited: false, updatedAt: '2026-01-03T00:00:00.000Z' },
+    { filename: 'assiduidade_01_2026_editado.txt', edited: true, updatedAt: '2026-01-04T00:00:00.000Z' },
+  ];
+
+  assert.deepEqual(
+    files.sort(compareStoredExports).map((file) => file.filename),
+    [
+      'assiduidade_01_2026_editado.txt',
+      'assiduidade_01_2026.txt',
+      'assiduidade_12_2025.txt',
+      'assiduidade_05_2024.txt',
+    ],
+  );
 });
 
 test('exports only months completely enclosed by the conversation interval', () => {

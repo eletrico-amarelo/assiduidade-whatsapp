@@ -11,6 +11,7 @@ import {
   getMonthlyExportPath,
   getMonthlyExportPlan,
   listMonthlyExports,
+  readActiveImportFile,
   readMonthlyExport,
 } from '../storage/imports.js';
 import type { AttendanceConfig } from '../types.js';
@@ -57,6 +58,18 @@ analyseRouter.post('/', upload.single('file'), async (request, response, next) =
 analyseRouter.post('/imports/:importId/export-months', async (request, response, next) => {
   try {
     response.json(await createMonthlyExports(request.params.importId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+analyseRouter.get('/imports/:importId/file', async (request, response, next) => {
+  try {
+    const file = await readActiveImportFile(request.params.importId);
+    response
+      .type('text/plain')
+      .setHeader('Content-Disposition', `inline; filename="${file.filename.replace(/"/g, '')}"`);
+    response.send(file.content);
   } catch (error) {
     next(error);
   }
@@ -129,6 +142,9 @@ function parseConfigValue(value: unknown): AttendanceConfig {
     ignoredMessagePatterns: Array.isArray(parsed.ignoredMessagePatterns)
       ? parsed.ignoredMessagePatterns
       : defaultConfig.ignoredMessagePatterns,
+    toleranceMinutes: Number.isFinite(parsed.toleranceMinutes)
+      ? Number(parsed.toleranceMinutes)
+      : defaultConfig.toleranceMinutes,
     workingDays: Array.isArray(parsed.workingDays) ? parsed.workingDays : defaultConfig.workingDays,
     dateFrom: parsed.dateFrom || undefined,
     dateTo: parsed.dateTo || undefined,

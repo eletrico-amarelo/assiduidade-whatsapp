@@ -8,6 +8,7 @@ import {
   FileText,
   FolderOpen,
   Download,
+  Eye,
   Pencil,
   Plus,
   Save,
@@ -46,14 +47,15 @@ import type {
 
 const DEFAULT_CONFIG: AttendanceConfig = {
   periods: [
-    { id: 'morning', label: 'Manhã', start: '09:00', end: '13:30' },
-    { id: 'afternoon', label: 'Tarde', start: '13:31', end: '19:00' },
+    { id: 'morning', label: 'Manhã', start: '08:00', end: '13:30' },
+    { id: 'afternoon', label: 'Tarde', start: '13:30', end: '20:00' },
   ],
   aliases: {
     in: ['IN', 'ENTRADA', 'CHECK IN', 'CHECK-IN'],
     out: ['OUT', 'SAÍDA', 'SAIDA', 'CHECK OUT', 'CHECK-OUT'],
   },
   ignoredMessagePatterns: [],
+  toleranceMinutes: 15,
   workingDays: [1, 2, 3, 4, 5],
 };
 
@@ -71,6 +73,7 @@ const statusMeta: Record<DayStatus, { label: string; colour: string }> = {
   complete: { label: 'Completo', colour: '#2dbd85' },
   partial: { label: 'Incompleto', colour: '#ffb347' },
   absent: { label: 'Sem registos', colour: '#ef6673' },
+  holiday: { label: 'Feriado', colour: '#b85445' },
 };
 
 function formatDate(date: string) {
@@ -103,6 +106,8 @@ function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [storedExports, setStoredExports] = useState<StoredExport[]>([]);
   const [showFileChooser, setShowFileChooser] = useState(false);
+  const [inAliasesText, setInAliasesText] = useState(DEFAULT_CONFIG.aliases.in.join(', '));
+  const [outAliasesText, setOutAliasesText] = useState(DEFAULT_CONFIG.aliases.out.join(', '));
 
   useEffect(() => {
     let active = true;
@@ -238,6 +243,7 @@ function App() {
     fullDate: day.date,
     score: day.score,
     status: day.status,
+    holidayName: day.holidayName,
   }));
 
   return (
@@ -377,6 +383,20 @@ function App() {
                   </label>
                 </div>
               ))}
+              <label className="tolerance-field">
+                Tolerância antes/depois (minutos)
+                <input
+                  type="number"
+                  min="0"
+                  max="120"
+                  step="1"
+                  value={config.toleranceMinutes}
+                  onChange={(event) => setConfig((current) => ({
+                    ...current,
+                    toleranceMinutes: Number(event.target.value),
+                  }))}
+                />
+              </label>
             </div>
 
             <div className="rule-card">
@@ -403,6 +423,9 @@ function App() {
                   </button>
                 ))}
               </div>
+              <p className="calendar-note">
+                Os feriados nacionais portugueses são excluídos automaticamente. Carnaval e feriados municipais não são considerados.
+              </p>
             </div>
 
             <div className="rule-card aliases-card">
@@ -410,21 +433,29 @@ function App() {
               <label>
                 IN (separar por vírgulas)
                 <input
-                  value={config.aliases.in.join(', ')}
-                  onChange={(event) => setConfig((current) => ({
-                    ...current,
-                    aliases: { ...current.aliases, in: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) },
-                  }))}
+                  value={inAliasesText}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setInAliasesText(value);
+                    setConfig((current) => ({
+                      ...current,
+                      aliases: { ...current.aliases, in: value.split(',').map((item) => item.trim()).filter(Boolean) },
+                    }));
+                  }}
                 />
               </label>
               <label>
                 OUT (separar por vírgulas)
                 <input
-                  value={config.aliases.out.join(', ')}
-                  onChange={(event) => setConfig((current) => ({
-                    ...current,
-                    aliases: { ...current.aliases, out: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) },
-                  }))}
+                  value={outAliasesText}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setOutAliasesText(value);
+                    setConfig((current) => ({
+                      ...current,
+                      aliases: { ...current.aliases, out: value.split(',').map((item) => item.trim()).filter(Boolean) },
+                    }));
+                  }}
                 />
               </label>
             </div>
@@ -462,12 +493,22 @@ function App() {
               <h2>Resultado da análise</h2>
               <p>{result.recognisedPunches} picagens reconhecidas em {result.totalMessages} mensagens.</p>
             </div>
-            <label className="participant-select">
-              Participante
-              <select value={participant} onChange={(event) => setParticipant(event.target.value)}>
-                {result.participants.map((name) => <option key={name}>{name}</option>)}
-              </select>
-            </label>
+            <div className="result-actions">
+              <a
+                className="ui-button ui-button-outline view-file-button"
+                href={`/api/analyse/imports/${result.importId}/file`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Eye size={16} /> Ver ficheiro
+              </a>
+              <label className="participant-select">
+                Participante
+                <select value={participant} onChange={(event) => setParticipant(event.target.value)}>
+                  {result.participants.map((name) => <option key={name}>{name}</option>)}
+                </select>
+              </label>
+            </div>
           </section>
 
           <Card className="export-panel">
@@ -659,13 +700,17 @@ function SummaryCard({ icon, label, value, accent = 'default' }: { icon: ReactNo
   );
 }
 
-function AttendanceTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { fullDate: string; score: number; status: DayStatus } }> }) {
+function AttendanceTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { fullDate: string; score: number; status: DayStatus; holidayName?: string } }> }) {
   if (!active || !payload?.[0]) return null;
   const entry = payload[0].payload;
   return (
     <div className="chart-tooltip">
       <strong>{formatLongDate(entry.fullDate)}</strong>
-      <span>{statusMeta[entry.status].label} · {entry.score}%</span>
+      <span>
+        {entry.status === 'holiday'
+          ? `Feriado nacional · ${entry.holidayName ?? ''}`
+          : `${statusMeta[entry.status].label} · ${entry.score}%`}
+      </span>
     </div>
   );
 }
@@ -679,7 +724,7 @@ function AttendanceRow({ day }: { day: AttendanceDay }) {
       </td>
       {day.periods.map((period) => (
         <td key={period.periodId}>
-          <div className={`period-pill ${period.complete ? 'complete' : 'incomplete'}`}>
+          <div className={`period-pill ${day.status === 'holiday' ? 'holiday' : period.complete ? 'complete' : 'incomplete'}`}>
             <span>{period.inTime ?? '—'}</span>
             <i>→</i>
             <span>{period.outTime ?? '—'}</span>
@@ -688,7 +733,7 @@ function AttendanceRow({ day }: { day: AttendanceDay }) {
       ))}
       <td><span className={`status-badge ${day.status}`}>{statusMeta[day.status].label}</span></td>
       <td className="issues-cell">
-        {day.issues.length ? day.issues.join(' · ') : 'Sem ocorrências'}
+        {day.holidayName ? `Feriado nacional: ${day.holidayName}` : day.issues.length ? day.issues.join(' · ') : 'Sem ocorrências'}
       </td>
     </tr>
   );

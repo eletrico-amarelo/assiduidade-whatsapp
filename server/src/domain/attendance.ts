@@ -9,6 +9,7 @@ import type {
   PunchKind,
   WhatsAppMessage,
 } from '../types.js';
+import { getPortugueseNationalHolidayName } from './portuguese-holidays.js';
 
 export function analyseAttendance(
   filename: string,
@@ -119,7 +120,37 @@ function buildParticipantDays(
 
   return enumerateDates(from, to)
     .filter((date) => config.workingDays.includes(dayOfWeek(date)))
-    .map((date) => evaluateDay(participant, date, byDate.get(date) ?? [], config));
+    .map((date) => {
+      const holidayName = getPortugueseNationalHolidayName(date);
+      return holidayName
+        ? evaluateHoliday(participant, date, config, holidayName)
+        : evaluateDay(participant, date, byDate.get(date) ?? [], config);
+    });
+}
+
+function evaluateHoliday(
+  participant: string,
+  date: string,
+  config: AttendanceConfig,
+  holidayName: string,
+): AttendanceDay {
+  return {
+    participant,
+    date,
+    weekday: weekdayLabel(date),
+    status: 'holiday',
+    score: 100,
+    periods: config.periods.map((period) => ({
+      periodId: period.id,
+      label: period.label,
+      complete: false,
+      punchCount: 0,
+      issues: [],
+    })),
+    outsidePeriod: [],
+    issues: [`Feriado nacional: ${holidayName}`],
+    holidayName,
+  };
 }
 
 function evaluateDay(
@@ -131,10 +162,20 @@ function evaluateDay(
   const sorted = [...punches].sort((a, b) => a.sortKey - b.sortKey);
   const assigned = new Set<Punch>();
 
-  const periods = config.periods.map((period) => {
+  const periods = config.periods.map((period, periodIndex) => {
     const start = timeToMinutes(period.start);
     const end = timeToMinutes(period.end);
-    const periodPunches = sorted.filter((punch) => punch.minuteOfDay >= start && punch.minuteOfDay <= end);
+    const tolerance = config.toleranceMinutes;
+    const previous = config.periods[periodIndex - 1];
+    const next = config.periods[periodIndex + 1];
+    const sharesStart = previous ? timeToMinutes(previous.end) === start : false;
+    const sharesEnd = next ? timeToMinutes(next.start) === end : false;
+    const periodPunches = sorted.filter((punch) => {
+      if (punch.minuteOfDay < start - tolerance || punch.minuteOfDay > end + tolerance) return false;
+      if (sharesStart && punch.kind === 'OUT' && punch.minuteOfDay <= start + tolerance) return false;
+      if (sharesEnd && punch.kind === 'IN' && punch.minuteOfDay >= end - tolerance) return false;
+      return true;
+    });
     periodPunches.forEach((punch) => assigned.add(punch));
     return evaluatePeriod(period.id, period.label, periodPunches);
   });
@@ -208,7 +249,9 @@ function evaluatePeriod(periodId: string, label: string, punches: Punch[]): Peri
 }
 
 function summariseParticipant(participant: string, days: AttendanceDay[]): ParticipantSummary {
-  const participantDays = days.filter((day) => day.participant === participant);
+  const participantDays = days.filter(
+    (day) => day.participant === participant && day.status !== 'holiday',
+  );
   const completeDays = participantDays.filter((day) => day.status === 'complete').length;
   const partialDays = participantDays.filter((day) => day.status === 'partial').length;
   const absentDays = participantDays.filter((day) => day.status === 'absent').length;
@@ -241,6 +284,9 @@ function resolveDayStatus(punchCount: number, completePeriods: number, periodCou
 function validateConfig(config: AttendanceConfig) {
   if (!Array.isArray(config.periods) || config.periods.length === 0) throw new Error('É necessário configurar pelo menos um período.');
   if (!Array.isArray(config.workingDays) || config.workingDays.length === 0) throw new Error('Seleciona pelo menos um dia útil.');
+  if (!Number.isInteger(config.toleranceMinutes) || config.toleranceMinutes < 0 || config.toleranceMinutes > 120) {
+    throw new Error('A tolerância deve ser um número inteiro entre 0 e 120 minutos.');
+  }
 
   const sorted = config.periods
     .map((period) => ({ ...period, startMinutes: timeToMinutes(period.start), endMinutes: timeToMinutes(period.end) }))
@@ -254,7 +300,7 @@ function validateConfig(config: AttendanceConfig) {
   for (let index = 1; index < sorted.length; index += 1) {
     const previous = sorted[index - 1];
     const current = sorted[index];
-    if (previous && current && current.startMinutes <= previous.endMinutes) {
+    if (previous && current && current.startMinutes < previous.endMinutes) {
       throw new Error(`Os períodos ${previous.label} e ${current.label} sobrepõem-se.`);
     }
   }

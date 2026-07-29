@@ -11,15 +11,18 @@ Aplicação web para importar uma exportação `.txt` de uma conversa do WhatsAp
 - Exportação idempotente de um ficheiro por cada mês completo (`assiduidade_MM_AAAA.txt`).
 - Edição ou remoção auditável de mensagens, guardando uma cópia com o sufixo `_editado`.
 - Seletor inicial para reutilizar uma exportação mensal já guardada.
+- Visualização do ficheiro atualmente em tratamento num novo separador.
 - Análise separada por participante da conversa.
 - Dois períodos configuráveis:
-  - manhã: 09:00–13:30;
-  - tarde: 13:31–19:00.
+  - manhã: 08:00–13:30;
+  - tarde: 13:30–20:00.
 - Um período só fica completo quando existe um `IN` seguido de um `OUT` dentro do mesmo período.
+- Tolerância configurável de 15 minutos antes e depois de cada período.
 - Estados diários: completo, incompleto ou sem registos.
 - Identificação de picagens em falta, ordem inválida, duplicados e registos fora dos períodos.
 - Gráfico diário, resumo e tabela de detalhe.
 - Intervalo de datas e dias úteis configuráveis para permitir contabilizar ausências.
+- Exclusão automática dos feriados nacionais portugueses, sem Carnaval nem feriados municipais.
 - Motor de regras isolado da interface, para facilitar novos requisitos.
 
 ## Tecnologias
