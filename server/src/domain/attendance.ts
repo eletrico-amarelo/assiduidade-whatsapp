@@ -3,6 +3,7 @@ import type {
   AttendanceConfig,
   AttendanceDay,
   ParticipantSummary,
+  MonthlyExport,
   PeriodResult,
   Punch,
   PunchKind,
@@ -13,6 +14,11 @@ export function analyseAttendance(
   filename: string,
   messages: WhatsAppMessage[],
   config: AttendanceConfig,
+  context: {
+    importId?: string;
+    monthlyExports?: MonthlyExport[];
+    editedFilename?: string;
+  } = {},
 ): AnalysisResponse {
   validateConfig(config);
 
@@ -55,6 +61,7 @@ export function analyseAttendance(
   const summaries = participants.map((participant) => summariseParticipant(participant, days));
 
   return {
+    importId: context.importId ?? '',
     filename,
     totalMessages: messages.length,
     recognisedPunches: punches.length,
@@ -66,6 +73,8 @@ export function analyseAttendance(
     summaries,
     warnings,
     config,
+    monthlyExports: context.monthlyExports ?? [],
+    editedFilename: context.editedFilename,
   };
 }
 

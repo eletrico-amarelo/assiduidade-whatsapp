@@ -28,6 +28,7 @@ export interface WhatsAppMessage {
   author?: string;
   text: string;
   sourceLine: number;
+  raw: string;
 }
 
 export interface Punch {
@@ -83,6 +84,7 @@ export interface IgnoredMessage {
 }
 
 export interface AnalysisResponse {
+  importId: string;
   filename: string;
   totalMessages: number;
   recognisedPunches: number;
@@ -94,4 +96,13 @@ export interface AnalysisResponse {
   summaries: ParticipantSummary[];
   warnings: string[];
   config: AttendanceConfig;
+  monthlyExports: MonthlyExport[];
+  editedFilename?: string;
+}
+
+export interface MonthlyExport {
+  month: number;
+  year: number;
+  filename: string;
+  exists: boolean;
 }

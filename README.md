@@ -8,6 +8,8 @@ Aplicação web para importar uma exportação `.txt` de uma conversa do WhatsAp
 - Leitura dos formatos de exportação WhatsApp mais comuns em Android e iOS.
 - Reconhecimento configurável de `IN` e `OUT` (inclui, por defeito, Entrada/Saída e Check in/Check out).
 - Lista configurável de textos de mensagens a ignorar.
+- Exportação idempotente de um ficheiro por cada mês completo (`assiduidade_M_AAAA.txt`).
+- Edição ou remoção auditável de mensagens, guardando uma cópia com o sufixo `_editado`.
 - Análise separada por participante da conversa.
 - Dois períodos configuráveis:
   - manhã: 09:00–13:30;
@@ -24,7 +26,7 @@ Aplicação web para importar uma exportação `.txt` de uma conversa do WhatsAp
 - React + TypeScript + Vite
 - Recharts
 - Node.js + Express + TypeScript
-- Multer para upload em memória (o ficheiro não é guardado em disco)
+- Multer para upload e armazenamento local auditável
 
 ## Executar localmente
 
@@ -87,3 +89,14 @@ Também são aceites anos com dois dígitos, segundos opcionais e mensagens com 
 - `client/src/App.tsx`: configuração e visualização.
 
 Para adicionar um novo período, alterar horários, dias úteis ou aliases, não é necessário modificar o parser. Para regras mais complexas, deve ser acrescentado um novo avaliador no domínio e mantido o contrato da API.
+
+## Ficheiros persistidos
+
+Os uploads originais são arquivados sem alterações em `data/imports`. Quando uma mensagem
+é editada ou removida, é criada uma cópia com o sufixo `_editado`; o original não é
+substituído. As exportações mensais são guardadas em `data/exports`. Se um nome mensal
+já existir, esse mês é ignorado.
+
+Um mês é considerado completo quando está totalmente contido entre a primeira e a última
+data da conversa. Um mês na extremidade do intervalo só é aceite se o ficheiro cobrir
+desde o primeiro até ao último dia desse mês.

@@ -6,9 +6,14 @@ import {
   ChevronDown,
   Clock3,
   FileText,
+  Download,
+  Pencil,
+  Save,
   Settings2,
+  Trash2,
   UploadCloud,
   Users,
+  X,
 } from 'lucide-react';
 import {
   Bar,
@@ -20,7 +25,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { analyseFile } from './api';
+import { analyseFile, changeImportedMessages, exportCompleteMonths } from './api';
 import { Badge, Button, Card } from './components/ui';
 import type {
   AnalysisResponse,
@@ -83,6 +88,10 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showRules, setShowRules] = useState(false);
+  const [editingLine, setEditingLine] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const selectedDays = useMemo(
     () => result?.days.filter((day) => day.participant === participant) ?? [],
@@ -114,10 +123,52 @@ function App() {
       const analysis = await analyseFile(file, config);
       setResult(analysis);
       setParticipant(analysis.participants[0] ?? '');
+      setActionMessage('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Ocorreu um erro inesperado.');
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function exportMonths() {
+    if (!result) return;
+    setIsSaving(true);
+    setError('');
+    try {
+      const exported = await exportCompleteMonths(result.importId);
+      const created = exported.created.length
+        ? `${exported.created.length} ficheiro(s) criado(s): ${exported.created.join(', ')}.`
+        : 'Não havia novos meses completos para exportar.';
+      const skipped = exported.skipped.length
+        ? ` ${exported.skipped.length} já existia(m) e foi/foram ignorado(s).`
+        : '';
+      setActionMessage(`${created}${skipped}`);
+      setResult((current) => current ? {
+        ...current,
+        monthlyExports: current.monthlyExports.map((item) => ({ ...item, exists: true })),
+      } : current);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível exportar os meses.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function saveMessageChange(sourceLine: number, change: { text?: string; remove?: boolean }) {
+    if (!result) return;
+    setIsSaving(true);
+    setError('');
+    try {
+      const analysis = await changeImportedMessages(result.importId, config, [{ sourceLine, ...change }]);
+      setResult(analysis);
+      setParticipant((current) => analysis.participants.includes(current) ? current : analysis.participants[0] ?? '');
+      setEditingLine(null);
+      setActionMessage(`Alterações guardadas em ${analysis.editedFilename}. O ficheiro original foi mantido.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível guardar as alterações.');
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -333,6 +384,45 @@ function App() {
             </label>
           </section>
 
+          <Card className="export-panel">
+            <div>
+              <span className="eyebrow">Exportação mensal</span>
+              <h3>Meses completos</h3>
+              <p>
+                {result.monthlyExports.length > 0
+                  ? `${result.monthlyExports.length} mês/meses completo(s) disponível(eis).`
+                  : 'Este ficheiro não contém nenhum mês completo.'}
+              </p>
+              {result.monthlyExports.length > 0 && (
+                <div className="monthly-file-list">
+                  {result.monthlyExports.map((item) => (
+                    item.exists ? (
+                      <a
+                        className="monthly-file-link"
+                        key={item.filename}
+                        href={`/api/analyse/exports/${encodeURIComponent(item.filename)}`}
+                        download
+                      >
+                        <Download size={12} /> {item.filename}
+                      </a>
+                    ) : (
+                      <Badge key={item.filename} variant="success">{item.filename}</Badge>
+                    )
+                  ))}
+                </div>
+              )}
+            </div>
+            <Button
+              type="button"
+              disabled={result.monthlyExports.length === 0 || isSaving}
+              onClick={exportMonths}
+            >
+              <Download size={16} /> Exportar meses
+            </Button>
+          </Card>
+
+          {actionMessage && <div className="action-message" role="status">{actionMessage}</div>}
+
           {selectedSummary && (
             <section className="summary-grid">
               <SummaryCard icon={<CheckCircle2 size={18} />} label="Taxa de assiduidade" value={`${selectedSummary.attendanceRate}%`} accent="positive" />
@@ -410,7 +500,56 @@ function App() {
                           <span>{formatLongDate(message.date)} · {message.time}</span>
                           <span>{message.author ?? 'Mensagem do sistema'}</span>
                         </div>
-                        <p>{message.text || 'Mensagem sem conteúdo'}</p>
+                        {editingLine === message.sourceLine ? (
+                          <div className="message-editor">
+                            <textarea
+                              value={editingText}
+                              onChange={(event) => setEditingText(event.target.value)}
+                              rows={3}
+                              autoFocus
+                            />
+                            <div>
+                              <Button
+                                type="button"
+                                disabled={!editingText.trim() || isSaving}
+                                onClick={() => saveMessageChange(message.sourceLine, { text: editingText })}
+                              >
+                                <Save size={15} /> Guardar
+                              </Button>
+                              <Button variant="outline" type="button" onClick={() => setEditingLine(null)}>
+                                <X size={15} /> Cancelar
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p>{message.text || 'Mensagem sem conteúdo'}</p>
+                            <div className="message-actions">
+                              <Button
+                                variant="outline"
+                                type="button"
+                                onClick={() => {
+                                  setEditingLine(message.sourceLine);
+                                  setEditingText(message.text);
+                                }}
+                              >
+                                <Pencil size={14} /> Editar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                type="button"
+                                disabled={isSaving}
+                                onClick={() => {
+                                  if (window.confirm('Remover esta mensagem da cópia editada? O original será mantido.')) {
+                                    void saveMessageChange(message.sourceLine, { remove: true });
+                                  }
+                                }}
+                              >
+                                <Trash2 size={14} /> Remover
+                              </Button>
+                            </div>
+                          </>
+                        )}
                       </article>
                     ))}
                   </div>

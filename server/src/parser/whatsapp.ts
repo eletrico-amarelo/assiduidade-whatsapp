@@ -23,6 +23,7 @@ export function parseWhatsAppExport(content: string): WhatsAppMessage[] {
     const previous = messages.at(-1);
     if (previous && line.trim()) {
       previous.text += `\n${line}`;
+      previous.raw += `\n${line}`;
     }
   }
 
@@ -62,6 +63,7 @@ function parseStartLine(line: string, sourceLine: number): WhatsAppMessage | nul
       author,
       text,
       sourceLine,
+      raw: line,
     };
   }
 
