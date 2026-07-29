@@ -36,6 +36,6 @@ app.use((error: unknown, _request: Request, response: Response, _next: NextFunct
   response.status(status).json({ error: message });
 });
 
-app.listen(port, () => {
-  console.log(`Assiduidade API disponível em http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Assiduidade API disponível na porta ${port} em todas as interfaces de rede`);
 });

@@ -36,6 +36,19 @@ npm run dev
 
 Abrir `http://localhost:5173`.
 
+### Aceder a partir da mesma rede
+
+Ao executar `npm run dev`, o frontend e a API escutam em todas as interfaces de rede.
+Num computador ou telemóvel ligado à mesma rede, abrir:
+
+```text
+http://IP-DO-COMPUTADOR:5173
+```
+
+O Vite apresenta no terminal o endereço de rede disponível. Em alternativa, consultar
+o IP local nas definições de rede do sistema operativo. A firewall do computador deve
+permitir ligações às portas `5173` e `3001`.
+
 ### Docker
 
 ```bash
