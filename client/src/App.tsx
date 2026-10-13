@@ -12,6 +12,7 @@ import {
   Eye,
   Pencil,
   Plus,
+  RefreshCw,
   RotateCcw,
   Save,
   Settings2,
@@ -37,6 +38,7 @@ import {
   exportCompleteMonths,
   listStoredExports,
   loadRules,
+  reanalyseImport,
   resetRules as resetStoredRules,
   saveRules as saveStoredRules,
 } from './api';
@@ -76,11 +78,11 @@ const weekdayLabels = [
 ];
 
 const statusMeta: Record<DayStatus, { label: string; colour: string }> = {
-  complete: { label: 'Completo', colour: '#2dbd85' },
-  partial: { label: 'Incompleto', colour: '#ffb347' },
+  complete: { label: 'Completo', colour: '#9bedd3' },
+  partial: { label: 'Incompleto', colour: '#fcf6bd' },
   absent: { label: 'Sem registos', colour: '#ef6673' },
-  holiday: { label: 'Feriado', colour: '#b85445' },
-  vacation: { label: 'Férias', colour: '#3b82f6' },
+  holiday: { label: 'Feriado', colour: '#e27396' },
+  vacation: { label: 'Férias', colour: '#b3dee2' },
 };
 
 function formatDate(date: string) {
@@ -95,6 +97,12 @@ function formatLongDate(date: string) {
     month: '2-digit',
     year: 'numeric',
   }).format(new Date(`${date}T12:00:00`));
+}
+
+function createLocalId() {
+  const secureId = globalThis.crypto?.randomUUID?.();
+  if (secureId) return secureId;
+  return `vacation-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function App() {
@@ -247,11 +255,34 @@ function App() {
       const saved = await saveStoredRules(config);
       setConfig(saved.config);
       setRulesSource(saved.source);
-      setActionMessage('Regras guardadas em data/config/regras.json. Serão usadas nas próximas análises.');
+      if (result) {
+        const analysis = await reanalyseImport(result.importId, saved.config);
+        setResult(analysis);
+        setParticipant((current) => analysis.participants.includes(current) ? current : analysis.participants[0] ?? '');
+        setActionMessage('Regras guardadas e relatório recalculado.');
+      } else {
+        setActionMessage('Regras guardadas em data/config/regras.json. Serão usadas nas próximas análises.');
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível guardar as regras.');
     } finally {
       setIsSavingRules(false);
+    }
+  }
+
+  async function recalculateReport() {
+    if (!result) return;
+    setIsLoading(true);
+    setError('');
+    try {
+      const analysis = await reanalyseImport(result.importId, config);
+      setResult(analysis);
+      setParticipant((current) => analysis.participants.includes(current) ? current : analysis.participants[0] ?? '');
+      setActionMessage('Relatório recalculado com as regras guardadas.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível recalcular o relatório.');
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -279,7 +310,7 @@ function App() {
       vacations: [
         ...current.vacations,
         {
-          id: crypto.randomUUID(),
+          id: createLocalId(),
           participant: participant || current.vacations[0]?.participant || '',
           from: '',
           to: '',
@@ -646,6 +677,9 @@ function App() {
               <p>{result.recognisedPunches} picagens reconhecidas em {result.totalMessages} mensagens.</p>
             </div>
             <div className="result-actions">
+              <Button variant="outline" type="button" disabled={isLoading} onClick={() => void recalculateReport()}>
+                <RefreshCw size={16} /> Recalcular
+              </Button>
               <a
                 className="ui-button ui-button-outline view-file-button"
                 href={`/api/analyse/imports/${result.importId}/file`}

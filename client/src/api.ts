@@ -112,3 +112,16 @@ export async function resetRules() {
   }
   return { config: payload.config, source: payload.source };
 }
+
+export async function reanalyseImport(importId: string, config: AttendanceConfig) {
+  const response = await fetch(`/api/analyse/imports/${importId}/reanalyse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ config }),
+  });
+  const payload = (await response.json()) as AnalysisResponse | { error?: string };
+  if (!response.ok) {
+    throw new Error('error' in payload && payload.error ? payload.error : 'Não foi possível recalcular o relatório.');
+  }
+  return payload as AnalysisResponse;
+}

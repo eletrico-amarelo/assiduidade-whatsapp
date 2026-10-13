@@ -76,6 +76,21 @@ analyseRouter.get('/imports/:importId/file', async (request, response, next) => 
   }
 });
 
+analyseRouter.post('/imports/:importId/reanalyse', async (request, response, next) => {
+  try {
+    const file = await readActiveImportFile(request.params.importId);
+    const config = await resolveConfigValue(request.body.config);
+    const messages = parseWhatsAppExport(file.content);
+    response.json(analyseAttendance(file.filename, messages, config, {
+      importId: request.params.importId,
+      monthlyExports: await getMonthlyExportPlan(messages),
+      editedFilename: /_editado\.txt$/i.test(file.filename) ? file.filename : undefined,
+    }));
+  } catch (error) {
+    next(error);
+  }
+});
+
 analyseRouter.get('/exports', async (_request, response, next) => {
   try {
     response.json({ files: await listMonthlyExports() });
